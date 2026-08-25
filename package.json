@@ -1,0 +1,18 @@
+{
+  "name": "ross",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Script-reading agent for continuity + fact checks (Agentic Cinema / Parallel track)",
+  "packageManager": "pnpm@11.2.2",
+  "scripts": {
+    "dev": "pnpm -r --parallel --if-present run dev",
+    "build": "pnpm -r --if-present run build",
+    "lint": "pnpm -r --if-present run lint",
+    "dev:api": "pnpm --filter @ross/api dev",
+    "dev:web": "pnpm --filter @ross/web dev",
+    "build:shared": "pnpm --filter @ross/shared build"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
