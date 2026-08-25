@@ -5,6 +5,7 @@
 **/venv
 **/__pycache__
 **/*.pyc
+**/*.tsbuildinfo
 .env
 .env.local
 .env.*.local

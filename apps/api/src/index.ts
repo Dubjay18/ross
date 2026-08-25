@@ -1,7 +1,10 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { ROSS_VERSION, type HealthStatus } from "@ross/shared";
+import {
+  ROSS_VERSION,
+  type HealthStatus,
+} from "@ross/shared";
 
 const app = new Hono();
 

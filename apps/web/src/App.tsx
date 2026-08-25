@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
-import { ROSS_VERSION } from "@ross/shared";
-
-type Health = { ok: boolean; service: string; version?: string };
+import { ROSS_VERSION, type HealthStatus } from "@ross/shared";
 
 const apiBase = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
 export function App() {
-  const [apiHealth, setApiHealth] = useState<Health | null>(null);
+  const [apiHealth, setApiHealth] = useState<HealthStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -14,7 +12,7 @@ export function App() {
     fetch(`${apiBase}/health`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`API ${res.status}`);
-        return res.json() as Promise<Health>;
+        return res.json() as Promise<HealthStatus>;
       })
       .then((data) => {
         if (!cancelled) setApiHealth(data);
@@ -66,7 +64,7 @@ export function App() {
         </dl>
       </section>
 
-      <p className="foot">Module 0 scaffold — upload &amp; analysis land next.</p>
+      <p className="foot">Module 1 contracts loaded — upload &amp; analysis land next.</p>
     </main>
   );
 }
