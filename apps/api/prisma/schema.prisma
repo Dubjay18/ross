@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ScriptFormat {
+  plaintext
+  fountain
+}
+
+enum TimeOfDay {
+  INT
+  EXT
+}
+
+enum LineType {
+  dialogue
+  action
+  direction
+  parenthetical
+  transition
+}
+
+enum IssueType {
+  continuity_prop
+  continuity_wardrobe
+  continuity_injury
+  timeline
+  geography
+  character_knowledge
+  external_fact
+  ambiguous
+  unverifiable
+}
+
+enum Severity {
+  critical
+  high
+  medium
+  low
+}
+
+enum IssueStatus {
+  open
+  investigating
+  confirmed
+  dismissed
+  resolved
+}
+
+enum JobStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+enum JobMode {
+  full
+  partial
+}
+
+model Script {
+  id         String       @id @default(uuid())
+  title      String
+  rawText    String
+  format     ScriptFormat
+  uploadedAt DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  scenes      Scene[]
+  characters  Character[]
+  issues      Issue[]
+  jobs        AnalysisJob[]
+
+  @@map("scripts")
+}
+
+model Character {
+  id       String   @id @default(uuid())
+  scriptId String
+  script   Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  name     String
+  aliases  String[] @default([])
+
+  @@index([scriptId])
+  @@map("characters")
+}
+
+model Scene {
+  id          String    @id @default(uuid())
+  scriptId    String
+  script      Script    @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  number      Int
+  heading     String
+  location    String?
+  timeOfDay   TimeOfDay?
+  characterIds String[] @default([])
+
+  lines Line[]
+
+  @@index([scriptId])
+  @@map("scenes")
+}
+
+model Line {
+  id           String    @id @default(uuid())
+  sceneId      String
+  scene        Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  type         LineType
+  characterId  String?
+  text         String
+  sceneHeading String
+
+  @@index([sceneId])
+  @@map("lines")
+}
+
+model Issue {
+  id         String      @id @default(uuid())
+  scriptId   String
+  script     Script      @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  type       IssueType
+  severity   Severity
+  confidence Float
+  status     IssueStatus @default(open)
+
+  title       String
+  description String
+  evidence    String
+
+  sceneIds     String[] @default([])
+  characterIds String[] @default([])
+  entityName   String?
+
+  sourceConflict Json?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  resolvedAt     DateTime?
+  dismissedReason String?
+  recheckCount   Int       @default(0)
+  lastRecheckAt  DateTime?
+
+  sources IssueSource[]
+
+  @@index([scriptId])
+  @@index([status])
+  @@map("issues")
+}
+
+model IssueSource {
+  id              String   @id @default(uuid())
+  issueId         String
+  issue           Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  url             String
+  title           String
+  snippet         String
+  supportsVerdict Boolean
+  retrievedAt     DateTime
+
+  @@index([issueId])
+  @@map("issue_sources")
+}
+
+model AnalysisJob {
+  id          String    @id @default(uuid())
+  scriptId    String
+  script      Script    @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  status      JobStatus @default(queued)
+  mode        JobMode
+  sceneIds    String[]  @default([])
+  progress    Float?
+  error       String?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@index([scriptId])
+  @@map("analysis_jobs")
+}

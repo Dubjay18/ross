@@ -11,11 +11,14 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.14.1",
+    "@prisma/client": "6.19.3",
     "@ross/shared": "workspace:*",
-    "hono": "^4.7.5"
+    "hono": "^4.7.5",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
+    "prisma": "6.19.3",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
   }
