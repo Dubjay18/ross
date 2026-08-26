@@ -20,7 +20,7 @@ def main() -> int:
         return 1
 
     client = genai.Client(api_key=api_key)
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")  # NOTE: The model gemini-2.0-flash is no longer available. Use gemini-3.6-flash or gemini-3.5-turbo instead.
 
     try:
         response = client.models.generate_content(

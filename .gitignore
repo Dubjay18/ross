@@ -49,3 +49,5 @@ pgdata/
 
 # Generated
 *.generated.*
+
+package-lock.json
