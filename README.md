@@ -90,7 +90,15 @@ apps/api          Thin TS API
 apps/agent        Python agent (Gemini + Parallel tools)
 packages/shared   Shared contracts (Module 1+)
 scripts/          Smoke tests
+docs/             Architecture, team split, and module-by-module build docs
 ```
+
+## Docs
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system diagram, TS/Python
+  ownership split, and the API↔agent interface contract
+- [`docs/MODULES.md`](docs/MODULES.md) — deep breakdown of every remaining
+  module with an owner tag on each subtask
 
 ## Devpost compliance checklist
 

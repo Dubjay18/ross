@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FinalDraft DocumentType="Script" Template="No" Version="1">
+  <Content>
+    <Paragraph Type="Scene Heading">
+      <Text>INT. HOUSE - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>John enters the room quietly.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>JOHN</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Hello there.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>JANE</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Hi John!</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading">
+      <Text>EXT. STREET - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Rain falls heavily.</Text>
+    </Paragraph>
+  </Content>
+</FinalDraft>

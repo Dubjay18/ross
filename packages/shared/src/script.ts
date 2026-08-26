@@ -51,7 +51,7 @@ export type Scene = z.infer<typeof SceneSchema>;
 
 // ── Script ──
 
-export const ScriptFormatSchema = z.enum(["plaintext", "fountain"]);
+export const ScriptFormatSchema = z.enum(["plaintext", "fountain", "pdf", "fdx"]);
 
 export type ScriptFormat = z.infer<typeof ScriptFormatSchema>;
 

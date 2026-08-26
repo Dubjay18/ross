@@ -4,10 +4,12 @@ import { IssueSchema, IssueStatusSchema } from "./issue.js";
 
 // ── Upload Script ──
 
+// JSON body path — text-based formats only. Binary formats (pdf) must use
+// the multipart/form-data path on the same endpoint (see apps/api routes).
 export const UploadScriptRequestSchema = z.object({
   title: z.string().min(1).optional(),
   content: z.string().min(1),
-  format: z.enum(["plaintext", "fountain"]).default("plaintext"),
+  format: z.enum(["plaintext", "fountain", "fdx"]).default("plaintext"),
 });
 
 export type UploadScriptRequest = z.infer<typeof UploadScriptRequestSchema>;

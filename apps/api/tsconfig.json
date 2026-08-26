@@ -8,5 +8,6 @@
     "types": ["node"]
   },
   "include": ["src/**/*"],
+  "exclude": ["src/**/*.test.ts", "src/parser/__fixtures__"],
   "references": [{ "path": "../../packages/shared" }]
 }

@@ -23,6 +23,8 @@ class LineType(str, Enum):
 class ScriptFormat(str, Enum):
     plaintext = "plaintext"
     fountain = "fountain"
+    pdf = "pdf"
+    fdx = "fdx"
 
 
 class IssueType(str, Enum):

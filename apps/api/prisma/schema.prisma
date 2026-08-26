@@ -10,6 +10,8 @@ datasource db {
 enum ScriptFormat {
   plaintext
   fountain
+  pdf
+  fdx
 }
 
 enum TimeOfDay {

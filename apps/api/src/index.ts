@@ -10,6 +10,7 @@ import { scriptsRouter } from "./routes/scripts.js";
 import { issuesRouter } from "./routes/issues.js";
 import { jobsRouter } from "./routes/jobs.js";
 import { HttpError } from "./errors.js";
+import { ScriptTooLargeError } from "./parser/index.js";
 
 const app = new Hono();
 
@@ -39,6 +40,9 @@ app.onError((err, c) => {
   }
   if (err instanceof HttpError) {
     return c.json({ error: err.message }, err.status);
+  }
+  if (err instanceof ScriptTooLargeError) {
+    return c.json({ error: err.message }, 400);
   }
   console.error(err);
   return c.json({ error: "internal_error" }, 500);
