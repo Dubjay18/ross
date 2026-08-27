@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -179,6 +179,37 @@ class AnalysisJob(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+
+# ── Agent request/response models ──
+
+class IssueDraft(BaseModel):
+    type: IssueType
+    severity: Severity
+    confidence: float = Field(ge=0.0, le=1.0)
+    title: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    evidence: str = Field(min_length=1)
+    scene_ids: list[str] = Field(default_factory=list, alias="sceneIds")
+    character_ids: list[str] = Field(default_factory=list, alias="characterIds")
+    entity_name: Optional[str] = Field(default=None, alias="entityName")
+    sources: list[Source] = []
+    source_conflict: Optional[SourceConflict] = Field(default=None, alias="sourceConflict")
+
+    model_config = {"populate_by_name": True}
+
+
+class AnalyzeAgentRequest(BaseModel):
+    script: Script
+    mode: Literal["full", "partial"] = "full"
+    scene_ids: list[str] = Field(default_factory=list, alias="sceneIds")
+
+    model_config = {"populate_by_name": True}
+
+
+class AnalyzeAgentResponse(BaseModel):
+    issues: list[IssueDraft] = []
+
+    model_config = {"populate_by_name": True}
 
 # ── Lifecycle helpers ──
 

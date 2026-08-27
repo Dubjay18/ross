@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { ScriptSchema } from "./script.js";
-import { IssueSchema, IssueStatusSchema } from "./issue.js";
-
+import {
+  IssueSchema,
+  IssueStatusSchema,
+  IssueTypeSchema,
+  SeveritySchema,
+  SourceSchema,
+  SourceConflictSchema,
+} from "./issue.js";
 // ── Upload Script ──
 
 // JSON body path — text-based formats only. Binary formats (pdf) must use
@@ -122,3 +128,36 @@ export const RecheckResponseSchema = z.object({
 });
 
 export type RecheckResponse = z.infer<typeof RecheckResponseSchema>;
+
+// ── Issue Draft Schema ──
+export const IssueDraftSchema = z.object({
+  type: IssueTypeSchema,
+  severity: SeveritySchema,
+  confidence: z.number().min(0).max(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  evidence: z.string().min(1),
+  sceneIds: z.array(z.string().uuid()).default([]),
+  characterIds: z.array(z.string().uuid()).default([]),
+  entityName: z.string().nullable(),
+  sources: z.array(SourceSchema).default([]),
+  sourceConflict: SourceConflictSchema.nullable(),
+});
+
+export type IssueDraft = z.infer<typeof IssueDraftSchema>;
+
+// ── Analyze Agent Request Schema ──
+export const AnalyzeAgentRequestSchema = z.object({
+  script: ScriptSchema,
+  mode: z.enum(["full", "partial"]).default("full"),
+  sceneIds: z.array(z.string().uuid()).default([]),
+});
+
+export type AnalyzeAgentRequest = z.infer<typeof AnalyzeAgentRequestSchema>;
+
+// ── Analyze Agent Response Schema ──
+export const AnalyzeAgentResponseSchema = z.object({
+  issues: z.array(IssueDraftSchema).default([]),
+});
+
+export type AnalyzeAgentResponse = z.infer<typeof AnalyzeAgentResponseSchema>;
