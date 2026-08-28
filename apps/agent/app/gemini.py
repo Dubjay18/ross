@@ -30,7 +30,18 @@ if not GOOGLE_API_KEY:
         "GOOGLE_API_KEY is not set; Gemini calls will fail until it is configured."
     )
 
-client = genai.Client(api_key=GOOGLE_API_KEY)
+_client: Optional[genai.Client] = None
+
+
+def _get_client() -> genai.Client:
+    global _client
+    if _client is None:
+        if not GOOGLE_API_KEY:
+            raise GeminiError(
+                "GOOGLE_API_KEY is not set; Gemini calls cannot be made."
+            )
+        _client = genai.Client(api_key=GOOGLE_API_KEY)
+    return _client
 
 
 class GeminiError(Exception):
@@ -87,7 +98,7 @@ def generate(
         config.tool_config = tool_config
 
     try:
-        response = client.models.generate_content(
+        response = _get_client().models.generate_content(
             model=GEMINI_MODEL,
             contents=contents,
             config=config,

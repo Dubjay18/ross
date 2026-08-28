@@ -2,20 +2,16 @@
 
 This module defines the functions the Gemini model can call during analysis,
 plus helper utilities for looking up scenes and tracking emitted issues.
-
-For Module 4 the tools are stubs:
-- `flag_issue` appends to an in-memory list.
-- `search_parallel` returns a canned empty/mock result.
-- `get_scene` reads from the request's `Script` payload.
-
-Module 5 fills in `flag_issue` reasoning; Module 6 replaces
-`search_parallel` with a real Parallel Search API call.
 """
 
 from __future__ import annotations
 
 import logging
+import os
+from datetime import datetime, timezone
 from typing import Any, Optional
+
+from parallel import Parallel
 
 from app.models import IssueDraft, IssueType, Scene, Script, Severity, Source, SourceConflict
 
@@ -105,22 +101,108 @@ def get_scene(script: Script, scene_id: str) -> Optional[Scene]:
     return None
 
 
-# ── Parallel Search stub ──
+# ── Parallel Search ──
+
+
+PARALLEL_API_KEY = os.getenv("PARALLEL_API_KEY")
+if not PARALLEL_API_KEY:
+    logger.warning(
+        "PARALLEL_API_KEY is not set; Parallel Search calls will fail until configured."
+    )
+
+_parallel_client: Optional[Parallel] = None
+
+
+def _get_parallel_client() -> Parallel:
+    global _parallel_client
+    if _parallel_client is None:
+        if not PARALLEL_API_KEY:
+            raise RuntimeError(
+                "PARALLEL_API_KEY is not set; Parallel Search calls cannot be made."
+            )
+        _parallel_client = Parallel(api_key=PARALLEL_API_KEY)
+    return _parallel_client
 
 
 def search_parallel(query: str, objective: str) -> dict[str, Any]:
-    """Stub for the Parallel Search API.
+    """Call the Parallel Search API and return a normalized result dict.
 
-    Returns a canned 'no results' shape that matches the expected response
-    structure so callers can build against it. Module 6 will swap this body for
-    a real `parallel-web` SDK call.
+    The returned dict has the shape:
+        {
+            "query": str,
+            "objective": str,
+            "results": [
+                {
+                    "title": str,
+                    "url": str,
+                    "snippet": str,
+                    "supports_verdict": bool,
+                },
+                ...
+            ],
+            "summary": str | None,
+        }
     """
-    logger.info("Parallel search stub called: query=%r objective=%r", query, objective)
+    logger.info("Parallel search: query=%r objective=%r", query, objective)
+
+    try:
+        client = _get_parallel_client()
+        response = client.search(
+            search_queries=[query],
+            objective=objective,
+            mode="fast",
+            max_chars_total=4000,
+        )
+    except Exception as exc:
+        logger.exception("Parallel Search API call failed")
+        return {
+            "query": query,
+            "objective": objective,
+            "results": [],
+            "summary": f"Search failed: {exc}",
+        }
+
+    # Defensive normalization across SDK response shapes.
+    raw_results: list[Any] = []
+    summary: Optional[str] = None
+
+    if isinstance(response, dict):
+        raw_results = response.get("results", [])
+        summary = response.get("summary")
+    else:
+        raw_results = getattr(response, "results", None) or getattr(response, "data", None) or []
+        summary = getattr(response, "summary", None)
+
+    results: list[dict[str, Any]] = []
+    for item in raw_results:
+        if isinstance(item, dict):
+            results.append(
+                {
+                    "title": item.get("title", "Untitled"),
+                    "url": item.get("url", ""),
+                    "snippet": item.get("snippet", item.get("content", "")),
+                    "supports_verdict": item.get("supports_verdict", True),
+                }
+            )
+        else:
+            title = getattr(item, "title", "Untitled")
+            url = getattr(item, "url", "")
+            snippet = getattr(item, "snippet", getattr(item, "content", ""))
+            supports_verdict = getattr(item, "supports_verdict", True)
+            results.append(
+                {
+                    "title": title,
+                    "url": url,
+                    "snippet": snippet,
+                    "supports_verdict": supports_verdict,
+                }
+            )
+
     return {
         "query": query,
         "objective": objective,
-        "results": [],
-        "summary": "No live search performed (Module 4 stub).",
+        "results": results,
+        "summary": summary,
     }
 
 
@@ -220,6 +302,10 @@ SEARCH_PARALLEL_DECLARATION = {
             "objective": {
                 "type": "string",
                 "description": "What you are trying to verify (e.g. 'confirm this date').",
+            },
+            "scene_id": {
+                "type": "string",
+                "description": "The id of the scene where this claim appears (the 'id: ...' value, not the scene number).",
             },
         },
         "required": ["query", "objective"],
