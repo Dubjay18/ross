@@ -95,7 +95,7 @@ def merge_issues(issues: list[IssueDraft], script: Script) -> list[IssueDraft]:
     """Dedupe, merge sources, and rank a combined list of IssueDrafts.
 
     Args:
-        issues: candidate issues from Layer 1 and Layer 2.
+        issues: candidate issues from continuity and external verification.
         script: the full Script payload, used to map scene ids to scene numbers
             for stable sorting.
 

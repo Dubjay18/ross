@@ -1,8 +1,8 @@
 """Agent analysis routes: /analyze and /recheck.
 
 Both routes accept an AnalyzeAgentRequest and return an AnalyzeAgentResponse.
-The shared handler runs Layer 1 (internal continuity), Layer 2 (Parallel
-external verification), and Module 7 merge/dedup/severity ranking.
+The shared handler runs internal continuity checks, external verification, and
+merge/dedup/severity ranking before returning the final issue list.
 """
 
 from __future__ import annotations
@@ -12,10 +12,10 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 from pydantic import ValidationError
 
-from app.layer1.continuity import run_layer1
-from app.layer2.verification import run_layer2
+from app.continuity.continuity import run_continuity
 from app.merge import merge_issues
 from app.models import AnalyzeAgentRequest, AnalyzeAgentResponse
+from app.verification.verification import run_verification
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +25,8 @@ router = APIRouter(prefix="", tags=["analyze"])
 def _handle_analyze(payload: AnalyzeAgentRequest) -> AnalyzeAgentResponse:
     """Shared handler for full and partial analysis.
 
-    Runs Layer 1 internal continuity checks, Layer 2 Parallel verification,
-    then merges/dedupes/ranks the combined IssueDraft list before returning.
+    Runs internal continuity checks, external (Parallel) verification, then
+    merges/dedupes/ranks the combined IssueDraft list before returning.
     """
     logger.info(
         "Processing %s analysis for script=%s scene_count=%d focus_scenes=%d",
@@ -39,9 +39,9 @@ def _handle_analyze(payload: AnalyzeAgentRequest) -> AnalyzeAgentResponse:
     if payload.mode == "partial" and not payload.scene_ids:
         logger.warning("Partial analysis requested without scene_ids")
 
-    layer1_issues = run_layer1(payload)
-    layer2_issues = run_layer2(payload)
-    merged_issues = merge_issues(layer1_issues + layer2_issues, payload.script)
+    continuity_issues = run_continuity(payload)
+    verification_issues = run_verification(payload)
+    merged_issues = merge_issues(continuity_issues + verification_issues, payload.script)
     return AnalyzeAgentResponse(issues=merged_issues)
 
 

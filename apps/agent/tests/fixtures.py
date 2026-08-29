@@ -1,7 +1,7 @@
 """Test fixtures for the agent.
 
 These are hand-built Script objects with planted continuity errors so we can
-verify Layer 1 reasoning without needing the full API parser online.
+verify continuity reasoning without needing the full API parser online.
 """
 
 from __future__ import annotations

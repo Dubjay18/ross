@@ -1,4 +1,4 @@
-"""Layer 2: external verification using the Parallel Search API.
+"""External verification using the Parallel Search API.
 
 Flow:
 1. A targeted LLM pass extracts verifiable real-world claims from the script.
@@ -99,11 +99,11 @@ def _extract_claims(script: Script) -> list[dict[str, Any]]:
             tool_config=_FORCED_SEARCH_CONFIG,
         )
     except Exception:
-        logger.exception("Layer 2 claim extraction failed")
+        logger.exception("External verification claim extraction failed")
         return []
 
     calls = parse_function_calls(response)
-    logger.info("Layer 2 extracted %d search calls", len(calls))
+    logger.info("External verification extracted %d search calls", len(calls))
 
     claims: list[dict[str, Any]] = []
     for call in calls:
@@ -160,7 +160,7 @@ def _derive_verdict(sources: list[dict[str, Any]], claim_text: str) -> str:
             max_output_tokens=10,
         )
     except Exception:
-        logger.exception("Layer 2 verdict derivation failed")
+        logger.exception("External verification verdict derivation failed")
         return "unverifiable"
 
     text = (response.text or "").strip().lower()
@@ -187,18 +187,17 @@ def _build_conflict(sources: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
     return None
 
 
-def run_layer2(request: AnalyzeAgentRequest) -> list[IssueDraft]:
+def run_verification(request: AnalyzeAgentRequest) -> list[IssueDraft]:
     """Run external verification and return IssueDrafts for disputed/unverifiable claims."""
     script = request.script
-    logger.info("Layer 2 start: scenes=%d", len(script.scenes))
+    logger.info("External verification start: scenes=%d", len(script.scenes))
 
     claims = _extract_claims(script)
     if not claims:
-        logger.info("Layer 2 found no verifiable claims")
+        logger.info("External verification found no verifiable claims")
         return []
 
     registry = IssueRegistry()
-    now = datetime.now(timezone.utc).isoformat()
 
     for claim in claims:
         query = claim.get("query", "")
@@ -212,7 +211,7 @@ def run_layer2(request: AnalyzeAgentRequest) -> list[IssueDraft]:
         verdict = _derive_verdict(sources, claim_text=query)
 
         logger.info(
-            "Layer 2 claim=%r verdict=%s sources=%d scene_id=%s",
+            "External verification claim=%r verdict=%s sources=%d scene_id=%s",
             query,
             verdict,
             len(sources),
@@ -258,5 +257,5 @@ def run_layer2(request: AnalyzeAgentRequest) -> list[IssueDraft]:
             source_conflict=source_conflict,
         )
 
-    logger.info("Layer 2 emitted %d issues", len(registry.issues))
+    logger.info("External verification emitted %d issues", len(registry.issues))
     return registry.issues

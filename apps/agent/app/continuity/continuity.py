@@ -1,4 +1,4 @@
-"""Layer 1: internal continuity analysis over the full script.
+"""Internal continuity analysis over the full script.
 
 This module sends the entire parsed Script to Gemini with instructions to flag
 continuity errors as tool calls. Check families:
@@ -130,14 +130,14 @@ def _build_user_prompt(script: Script, mode: str, scene_ids: list[str]) -> str:
     return "\n\n".join(["\n".join(instructions), "=== SCREENPLAY ===", body])
 
 
-def run_layer1(request: AnalyzeAgentRequest) -> list[IssueDraft]:
-    """Run internal consistency analysis and return candidate IssueDrafts."""
+def run_continuity(request: AnalyzeAgentRequest) -> list[IssueDraft]:
+    """Run internal continuity analysis and return candidate IssueDrafts."""
     script = request.script
     mode = request.mode
     scene_ids = request.scene_ids
 
     logger.info(
-        "Layer 1 start: mode=%s scenes=%d focus=%d",
+        "Continuity analysis start: mode=%s scenes=%d focus=%d",
         mode,
         len(script.scenes),
         len(scene_ids),
@@ -154,7 +154,7 @@ def run_layer1(request: AnalyzeAgentRequest) -> list[IssueDraft]:
     )
 
     calls = parse_function_calls(response)
-    logger.info("Layer 1 received %d function calls", len(calls))
+    logger.info("Continuity analysis received %d function calls", len(calls))
 
     for call in calls:
         if call.get("name") != "flag_issue":
@@ -164,5 +164,5 @@ def run_layer1(request: AnalyzeAgentRequest) -> list[IssueDraft]:
         args = call.get("args", {})
         flag_issue(registry, **args)
 
-    logger.info("Layer 1 emitted %d issues", len(registry.issues))
+    logger.info("Continuity analysis emitted %d issues", len(registry.issues))
     return registry.issues

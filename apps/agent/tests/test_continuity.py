@@ -1,15 +1,15 @@
-"""Integration test for Layer 1 internal continuity analysis.
+"""Integration test for internal continuity analysis.
 
 This test requires GOOGLE_API_KEY to be set and google-genai installed. It runs
 the real Gemini model against hand-built fixture scripts with planted errors and
 asserts that the agent surfaces at least one relevant issue.
 
 Run with pytest:
-    pytest apps/agent/tests/test_layer1.py
+    pytest apps/agent/tests/test_continuity.py
 
 Or as a standalone script (will print results and exit 1 on failure):
     cd apps/agent
-    python tests/test_layer1.py
+    python tests/test_continuity.py
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import pytest
 # Make the app package importable when running as a standalone script.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.layer1.continuity import run_layer1
+from app.continuity.continuity import run_continuity
 from app.models import AnalyzeAgentRequest, Script
 from tests.fixtures import make_planted_injury_script, make_planted_prop_script
 
@@ -58,9 +58,9 @@ def test_planted_injury_continuity():
     valid_scene_ids = _collect_scene_ids(script)
     request = AnalyzeAgentRequest(script=script, mode="full")
 
-    issues = run_layer1(request)
+    issues = run_continuity(request)
 
-    assert issues, "Expected at least one Layer 1 issue for the planted injury error"
+    assert issues, "Expected at least one continuity issue for the planted injury error"
     assert _issue_cites_real_scene_ids(
         issues, valid_scene_ids
     ), f"Issue cited non-existent scene ids; valid ids are {valid_scene_ids}"
@@ -85,9 +85,9 @@ def test_planted_prop_continuity():
     valid_scene_ids = _collect_scene_ids(script)
     request = AnalyzeAgentRequest(script=script, mode="full")
 
-    issues = run_layer1(request)
+    issues = run_continuity(request)
 
-    assert issues, "Expected at least one Layer 1 issue for the planted prop error"
+    assert issues, "Expected at least one continuity issue for the planted prop error"
     assert _issue_cites_real_scene_ids(
         issues, valid_scene_ids
     ), f"Issue cited non-existent scene ids; valid ids are {valid_scene_ids}"
@@ -110,4 +110,4 @@ if __name__ == "__main__":
 
     test_planted_injury_continuity()
     test_planted_prop_continuity()
-    print("Layer 1 integration tests passed.")
+    print("continuity integration tests passed.")
