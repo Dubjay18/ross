@@ -1,8 +1,8 @@
 """Unit tests for external verification logic.
 
-These tests avoid network calls by monkeypatching `app.verification.verification.search_parallel`
-and `app.verification.verification._extract_claims`. Verdict derivation still calls
-`generate`, so that is also patched.
+These tests avoid network calls by monkeypatching `app.verification.verification.search_parallel`,
+`app.verification.verification.extract_parallel`, and `app.verification.verification._extract_claims`.
+Verdict derivation still calls `generate`, so that is also patched.
 """
 
 from __future__ import annotations
@@ -14,17 +14,25 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.verification import verification
 from app.models import AnalyzeAgentRequest
+from app.verification import verification
 from tests.fixtures import make_planted_prop_script
 
 
 def _make_search_result(sources: list[dict]) -> dict:
     return {
-        "query": "test query",
+        "queries": ["test query"],
         "objective": "test objective",
         "results": sources,
         "summary": "mock summary",
+    }
+
+
+def _make_extract_result(snippets: list[dict]) -> dict:
+    return {
+        "urls": [s.get("url", "") for s in snippets],
+        "objective": "test objective",
+        "results": snippets,
     }
 
 
@@ -53,17 +61,45 @@ def test_build_conflict_when_sources_agree():
 
 
 def test_build_sources_converts_results():
-    result = _make_search_result(
+    search = _make_search_result(
         [
             {"title": "Example", "url": "https://example.com", "snippet": "hello", "supports_verdict": True}
         ]
     )
-    sources = verification._build_sources(result)
+    extract = _make_extract_result([])
+    sources = verification._build_sources(search, extract)
     assert len(sources) == 1
     assert sources[0]["title"] == "Example"
     assert sources[0]["url"] == "https://example.com"
     assert sources[0]["supportsVerdict"] is True
     assert "retrievedAt" in sources[0]
+
+
+def test_build_sources_merges_extracted_content():
+    search = _make_search_result(
+        [
+            {"title": "Example", "url": "https://example.com", "snippet": "hello", "supports_verdict": True}
+        ]
+    )
+    extract = _make_extract_result(
+        [{"title": "Example", "url": "https://example.com", "snippet": "detailed extracted content"}]
+    )
+    sources = verification._build_sources(search, extract)
+    assert len(sources) == 1
+    assert "detailed extracted content" in sources[0]["snippet"]
+    assert "hello" in sources[0]["snippet"]
+
+
+def test_collect_top_urls():
+    search = _make_search_result(
+        [
+            {"title": "A", "url": "https://a.com", "snippet": "x"},
+            {"title": "B", "url": "https://b.com", "snippet": "y"},
+            {"title": "C", "url": "https://a.com", "snippet": "z"},  # duplicate url
+        ]
+    )
+    urls = verification._collect_top_urls(search, limit=3)
+    assert urls == ["https://a.com", "https://b.com"]
 
 
 def test_run_verification_emits_disputed_issue():
@@ -76,11 +112,15 @@ def test_run_verification_emits_disputed_issue():
     fake_search = _make_search_result(
         [{"title": "T", "url": "https://t.com", "snippet": "no", "supports_verdict": False}]
     )
+    fake_extract = _make_extract_result(
+        [{"title": "T", "url": "https://t.com", "snippet": "smartphones were not available in 1980"}]
+    )
 
     with patch.object(verification, "_extract_claims", return_value=fake_claims):
         with patch.object(verification, "search_parallel", return_value=fake_search):
-            with patch.object(verification, "generate", return_value=_make_generate_response("dispute")):
-                issues = verification.run_verification(request)
+            with patch.object(verification, "extract_parallel", return_value=fake_extract):
+                with patch.object(verification, "generate", return_value=_make_generate_response("dispute")):
+                    issues = verification.run_verification(request)
 
     assert issues
     assert any(issue.type.value == "external_fact" for issue in issues)
@@ -93,11 +133,13 @@ def test_run_verification_emits_unverifiable_issue():
 
     fake_claims = [{"query": "mystery claim", "objective": "verify", "scene_id": "scene-prop-2"}]
     fake_search = _make_search_result([])
+    fake_extract = _make_extract_result([])
 
     with patch.object(verification, "_extract_claims", return_value=fake_claims):
         with patch.object(verification, "search_parallel", return_value=fake_search):
-            with patch.object(verification, "generate", return_value=_make_generate_response("unverifiable")):
-                issues = verification.run_verification(request)
+            with patch.object(verification, "extract_parallel", return_value=fake_extract):
+                with patch.object(verification, "generate", return_value=_make_generate_response("unverifiable")):
+                    issues = verification.run_verification(request)
 
     assert issues
     assert any(issue.type.value == "unverifiable" for issue in issues)
@@ -112,11 +154,15 @@ def test_run_verification_skips_confirmed_claim():
     fake_search = _make_search_result(
         [{"title": "T", "url": "https://t.com", "snippet": "yes", "supports_verdict": True}]
     )
+    fake_extract = _make_extract_result(
+        [{"title": "T", "url": "https://t.com", "snippet": "confirmed"}]
+    )
 
     with patch.object(verification, "_extract_claims", return_value=fake_claims):
         with patch.object(verification, "search_parallel", return_value=fake_search):
-            with patch.object(verification, "generate", return_value=_make_generate_response("confirm")):
-                issues = verification.run_verification(request)
+            with patch.object(verification, "extract_parallel", return_value=fake_extract):
+                with patch.object(verification, "generate", return_value=_make_generate_response("confirm")):
+                    issues = verification.run_verification(request)
 
     # Confirmed claims should not produce issues.
     assert not issues

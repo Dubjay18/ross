@@ -1,16 +1,19 @@
-"""External verification using the Parallel Search API.
+"""External verification using the Parallel Search + Extract APIs.
 
 Flow:
 1. A targeted LLM pass extracts verifiable real-world claims from the script.
 2. The model is forced to call `search_parallel` for each claim it flags.
-3. Search results are normalized to Source objects.
-4. A verdict is derived: confirm / dispute / unverifiable.
-5. An IssueDraft is emitted for every disputed or unverifiable claim.
+3. For each claim we generate 2-3 search queries and pass them all to Parallel Search.
+4. We run `extract()` on the top result URLs to pull richer, focused content.
+5. Search snippets + extracted content are normalized to Source objects.
+6. A verdict is derived: confirm / dispute / unverifiable.
+7. An IssueDraft is emitted for every disputed or unverifiable claim.
 """
 
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -18,7 +21,7 @@ from google.genai.types import Tool, ToolConfig
 
 from app.gemini import generate, parse_function_calls
 from app.models import AnalyzeAgentRequest, IssueDraft, IssueType, Script
-from app.tools import SEARCH_PARALLEL_DECLARATION, IssueRegistry, flag_issue, search_parallel
+from app.tools import SEARCH_PARALLEL_DECLARATION, IssueRegistry, extract_parallel, flag_issue, search_parallel
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +49,7 @@ VERDICT_PROMPT = """You are a fact-checking analyst.
 
 Claim from the script: {claim_text}
 
-Search results:
+Evidence gathered from web sources:
 {results_text}
 
 Determine the verdict:
@@ -120,30 +123,109 @@ def _extract_claims(script: Script) -> list[dict[str, Any]]:
     return claims
 
 
-def _build_sources(search_result: dict[str, Any]) -> list[dict[str, Any]]:
-    """Convert a normalized search result into Source-compatible dicts."""
-    now = datetime.now(timezone.utc).isoformat()
-    sources: list[dict[str, Any]] = []
+def _build_search_queries(primary_query: str, objective: str) -> list[str]:
+    """Generate 2-3 parallel search queries for a single claim.
+
+    Parallel recommends multiple concise queries per call for broader, more
+    robust coverage. We keep the primary query from the model and ask Gemini to
+    rephrase it into alternative angles.
+    """
+    prompt = (
+        f"Original claim: {primary_query}\n"
+        f"Verification objective: {objective}\n\n"
+        "Generate 2 additional concise web search queries (3-6 words each) "
+        "that approach this claim from different angles. Return them as a "
+        "bulleted list, one per line, no numbering or explanation."
+    )
+
+    try:
+        response = generate(
+            system_prompt="You generate short web search queries.",
+            user_prompt=prompt,
+            temperature=0.2,
+            max_output_tokens=100,
+        )
+    except Exception:
+        logger.exception("Failed to generate extra search queries")
+        return [primary_query]
+
+    text = (response.text or "").strip()
+    extra = [line.strip("-• ").strip() for line in text.splitlines() if line.strip()]
+    extra = [q for q in extra if q]
+
+    queries = [primary_query]
+    for q in extra:
+        if q.lower() != primary_query.lower() and len(queries) < 3:
+            queries.append(q)
+
+    return queries
+
+
+def _collect_top_urls(search_result: dict[str, Any], limit: int = 3) -> list[str]:
+    """Return the top N unique URLs from a search result."""
+    urls: list[str] = []
+    seen: set[str] = set()
     for result in search_result.get("results", []):
-        sources.append(
-            {
-                "url": result.get("url", ""),
-                "title": result.get("title", "Untitled"),
-                "snippet": result.get("snippet", ""),
-                "supportsVerdict": result.get("supports_verdict", True),
+        url = result.get("url", "")
+        if url and url not in seen:
+            urls.append(url)
+            seen.add(url)
+        if len(urls) >= limit:
+            break
+    return urls
+
+
+def _build_sources(
+    search_result: dict[str, Any],
+    extract_result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Combine search snippets and extracted page content into Source-compatible dicts."""
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Start with search snippets; use url as the lookup key.
+    snippets_by_url: dict[str, dict[str, Any]] = {}
+    for result in search_result.get("results", []):
+        url = result.get("url", "")
+        if not url:
+            continue
+        snippets_by_url[url] = {
+            "url": url,
+            "title": result.get("title", "Untitled"),
+            "snippet": result.get("snippet", ""),
+            "supportsVerdict": result.get("supports_verdict", True),
+            "retrievedAt": now,
+        }
+
+    # Augment (or add) with extracted page content.
+    for extracted in extract_result.get("results", []):
+        url = extracted.get("url", "")
+        content = extracted.get("snippet", extracted.get("content", ""))
+        if not url or not content:
+            continue
+        if url in snippets_by_url:
+            existing = snippets_by_url[url]
+            # Combine snippet + extracted content, avoiding duplication.
+            if content not in existing["snippet"]:
+                existing["snippet"] = f"{existing['snippet']}\n\nExtracted content:\n{content}"
+        else:
+            snippets_by_url[url] = {
+                "url": url,
+                "title": extracted.get("title", "Untitled"),
+                "snippet": content,
+                "supportsVerdict": True,
                 "retrievedAt": now,
             }
-        )
-    return sources
+
+    return list(snippets_by_url.values())
 
 
 def _derive_verdict(sources: list[dict[str, Any]], claim_text: str) -> str:
-    """Use Gemini to derive confirm/dispute/unverifiable from sources."""
+    """Use Gemini to derive confirm/dispute/unverifiable from gathered evidence."""
     if not sources:
         return "unverifiable"
 
     results_text = "\n\n".join(
-        f"Source: {s.get('title', 'Untitled')}\n{s.get('snippet', '')}"
+        f"Source: {s.get('title', 'Untitled')}\nURL: {s.get('url', '')}\n{s.get('snippet', '')}"
         for s in sources
     )
 
@@ -206,16 +288,30 @@ def run_verification(request: AnalyzeAgentRequest) -> list[IssueDraft]:
         if not query or not objective:
             continue
 
-        search_result = search_parallel(query, objective)
-        sources = _build_sources(search_result)
+        session_id = str(uuid.uuid4())
+        search_queries = _build_search_queries(query, objective)
+
+        search_result = search_parallel(search_queries, objective, session_id=session_id)
+        top_urls = _collect_top_urls(search_result)
+
+        extract_result: dict[str, Any] = {"results": []}
+        if top_urls:
+            extract_result = extract_parallel(
+                urls=top_urls,
+                objective=objective,
+                session_id=session_id,
+            )
+
+        sources = _build_sources(search_result, extract_result)
         verdict = _derive_verdict(sources, claim_text=query)
 
         logger.info(
-            "External verification claim=%r verdict=%s sources=%d scene_id=%s",
+            "External verification claim=%r verdict=%s sources=%d scene_id=%s urls=%d",
             query,
             verdict,
             len(sources),
             scene_id,
+            len(top_urls),
         )
 
         if verdict == "confirm":
