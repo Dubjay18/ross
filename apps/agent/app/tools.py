@@ -124,12 +124,22 @@ def _get_parallel_client() -> Parallel:
     return _parallel_client
 
 
-def search_parallel(query: str, objective: str) -> dict[str, Any]:
+def search_parallel(
+    queries: str | list[str],
+    objective: str,
+    session_id: Optional[str] = None,
+) -> dict[str, Any]:
     """Call the Parallel Search API and return a normalized result dict.
+
+    Args:
+        queries: A single search query or a list of related queries. Multiple
+            queries give broader coverage.
+        objective: Natural-language description of what is being verified.
+        session_id: Optional session id to link this search with a later extract.
 
     The returned dict has the shape:
         {
-            "query": str,
+            "queries": list[str],
             "objective": str,
             "results": [
                 {
@@ -143,20 +153,29 @@ def search_parallel(query: str, objective: str) -> dict[str, Any]:
             "summary": str | None,
         }
     """
-    logger.info("Parallel search: query=%r objective=%r", query, objective)
+    if isinstance(queries, str):
+        queries = [queries]
+
+    logger.info(
+        "Parallel search: queries=%r objective=%r session_id=%s",
+        queries,
+        objective,
+        session_id,
+    )
 
     try:
         client = _get_parallel_client()
         response = client.search(
-            search_queries=[query],
+            search_queries=queries,
             objective=objective,
-            mode="fast",
+            mode="advanced",
             max_chars_total=4000,
+            session_id=session_id,
         )
     except Exception as exc:
         logger.exception("Parallel Search API call failed")
         return {
-            "query": query,
+            "queries": queries,
             "objective": objective,
             "results": [],
             "summary": f"Search failed: {exc}",
@@ -199,10 +218,89 @@ def search_parallel(query: str, objective: str) -> dict[str, Any]:
             )
 
     return {
-        "query": query,
+        "queries": queries,
         "objective": objective,
         "results": results,
         "summary": summary,
+    }
+
+
+def extract_parallel(
+    urls: list[str],
+    objective: str,
+    session_id: Optional[str] = None,
+    max_chars_total: int = 4000,
+) -> dict[str, Any]:
+    """Call the Parallel Extract API to pull focused content from URLs.
+
+    Args:
+        urls: URLs to extract from (up to 20).
+        objective: What to look for on the pages.
+        session_id: Optional session id linking this to a prior search.
+        max_chars_total: Upper bound on total extracted characters.
+
+    Returns a normalized dict:
+        {
+            "urls": list[str],
+            "objective": str,
+            "results": [
+                {"title": str, "url": str, "snippet": str},
+                ...
+            ],
+        }
+    """
+    if not urls:
+        return {"urls": [], "objective": objective, "results": []}
+
+    logger.info(
+        "Parallel extract: urls=%d objective=%r session_id=%s",
+        len(urls),
+        objective,
+        session_id,
+    )
+
+    try:
+        client = _get_parallel_client()
+        response = client.extract(
+            urls=urls,
+            objective=objective,
+            max_chars_total=max_chars_total,
+            session_id=session_id,
+        )
+    except Exception as exc:
+        logger.exception("Parallel Extract API call failed")
+        return {
+            "urls": urls,
+            "objective": objective,
+            "results": [],
+        }
+
+    raw_results: list[Any] = []
+    if isinstance(response, dict):
+        raw_results = response.get("results", [])
+    else:
+        raw_results = getattr(response, "results", None) or getattr(response, "data", None) or []
+
+    results: list[dict[str, Any]] = []
+    for item in raw_results:
+        if isinstance(item, dict):
+            results.append(
+                {
+                    "title": item.get("title", "Untitled"),
+                    "url": item.get("url", ""),
+                    "snippet": item.get("snippet", item.get("content", "")),
+                }
+            )
+        else:
+            title = getattr(item, "title", "Untitled")
+            url = getattr(item, "url", "")
+            snippet = getattr(item, "snippet", getattr(item, "content", ""))
+            results.append({"title": title, "url": url, "snippet": snippet})
+
+    return {
+        "urls": urls,
+        "objective": objective,
+        "results": results,
     }
 
 
