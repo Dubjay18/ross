@@ -107,6 +107,34 @@ export async function resolveIssuesForRemovedScenes(
   return toResolve.length;
 }
 
+/**
+ * Auto-resolves pre-existing issues that touch a just-rechecked scene when
+ * the recheck no longer reproduces them. A partial recheck re-examines its
+ * focus scenes against the full script for context, so any older issue
+ * referencing one of those scenes has effectively been re-verified — if the
+ * agent didn't re-flag it, treat it as fixed rather than leaving it open
+ * forever. Issues a human already resolved or dismissed are left alone, and
+ * this must run before the recheck's new drafts are persisted so it never
+ * resolves the issues it just created.
+ */
+export async function resolveStaleIssuesForRecheckedScenes(
+  scriptId: string,
+  recheckedSceneIds: string[],
+): Promise<number> {
+  if (recheckedSceneIds.length === 0) return 0;
+
+  const { count } = await prisma.issue.updateMany({
+    where: {
+      scriptId,
+      status: { notIn: ["resolved", "dismissed"] },
+      sceneIds: { hasSome: recheckedSceneIds },
+    },
+    data: { status: "resolved", resolvedAt: new Date(), dismissedReason: "recheck_no_longer_reproduced" },
+  });
+
+  return count;
+}
+
 export async function updateIssueStatus(
   id: string,
   input: { status?: IssueStatus; dismissedReason?: string | null },

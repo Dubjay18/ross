@@ -1,6 +1,6 @@
 import type { Script } from "@ross/shared";
 import { analyzeScript, recheckScript } from "./agent-client.js";
-import { createIssuesFromDrafts } from "./repositories/issues.js";
+import { createIssuesFromDrafts, resolveStaleIssuesForRecheckedScenes } from "./repositories/issues.js";
 import { markJobCompleted, markJobFailed, markJobRunning } from "./repositories/jobs.js";
 
 /**
@@ -19,6 +19,9 @@ export async function runAnalysisJob(
     await markJobRunning(jobId);
     const result =
       mode === "partial" ? await recheckScript(script, sceneIds) : await analyzeScript(script, mode, sceneIds);
+    if (mode === "partial") {
+      await resolveStaleIssuesForRecheckedScenes(script.id, sceneIds);
+    }
     await createIssuesFromDrafts(script.id, result.issues);
     await markJobCompleted(jobId);
   } catch (err) {
