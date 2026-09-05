@@ -112,10 +112,10 @@ function Workspace({ onBack }: { onBack: () => void }) {
     }
   }
 
-  async function handleTransition(issueId: string, status: IssueStatus) {
+  async function handleTransition(issueId: string, status: IssueStatus, dismissedReason?: string) {
     setActionBusy(true);
     try {
-      const { issue } = await updateIssueStatus(issueId, status);
+      const { issue } = await updateIssueStatus(issueId, status, dismissedReason);
       setIssues((prev) => prev.map((i) => (i.id === issue.id ? issue : i)));
     } finally {
       setActionBusy(false);
@@ -202,7 +202,9 @@ function Workspace({ onBack }: { onBack: () => void }) {
                   issue={selectedIssue}
                   script={script}
                   busy={actionBusy}
-                  onTransition={(status) => handleTransition(selectedIssue.id, status)}
+                  onTransition={(status, dismissedReason) =>
+                    handleTransition(selectedIssue.id, status, dismissedReason)
+                  }
                   onRecheck={handleRecheck}
                 />
               )}

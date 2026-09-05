@@ -569,6 +569,26 @@ dd {
   gap: 0.5rem;
 }
 
+.dismiss-reason-row {
+  align-items: center;
+}
+
+.dismiss-reason-input {
+  flex: 1 1 14rem;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.dismiss-reason-input:focus {
+  outline: none;
+  border-color: var(--muted);
+}
+
 .job-banner {
   display: flex;
   align-items: center;
