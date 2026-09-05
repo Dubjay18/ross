@@ -24,8 +24,11 @@ services:
     environment:
       PORT: 3001
       DATABASE_URL: postgresql://${POSTGRES_USER:-ross}:${POSTGRES_PASSWORD:-ross}@db:5432/${POSTGRES_DB:-ross}
+      AGENT_URL: http://agent:8000
     depends_on:
       db:
+        condition: service_healthy
+      agent:
         condition: service_healthy
     healthcheck:
       test:
