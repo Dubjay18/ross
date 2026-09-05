@@ -60,6 +60,16 @@ export {
   type RecheckRequest,
   RecheckResponseSchema,
   type RecheckResponse,
+  UpdateScriptRequestSchema,
+  type UpdateScriptRequest,
+  UpdateScriptResponseSchema,
+  type UpdateScriptResponse,
+  IssueDraftSchema,
+  type IssueDraft,
+  AnalyzeAgentRequestSchema,
+  type AnalyzeAgentRequest,
+  AnalyzeAgentResponseSchema,
+  type AnalyzeAgentResponse,
 } from "./api.js";
 
 // Job types

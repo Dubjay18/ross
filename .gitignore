@@ -51,3 +51,4 @@ pgdata/
 *.generated.*
 
 package-lock.json
+.gstack/

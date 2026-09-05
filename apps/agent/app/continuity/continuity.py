@@ -57,6 +57,14 @@ Rules:
 - Do not invent issues where the script gives a clear on-page explanation.
 - Confidence should reflect how unambiguous the contradiction is: 0.9+ for clear
   contradictions, 0.5-0.7 for plausible but inference-heavy problems.
+- Severity should reflect audience impact, not just how certain you are:
+  `critical`/`high` for errors an audience would visibly notice on screen
+  (a prop, an injury, or a wardrobe state changing without explanation);
+  `medium`/`low` for errors that require piecing together background details
+  to notice (timeline math, a location property mentioned only in passing).
+  A confident but subtle error can still be `low` severity, and an obvious
+  on-screen error stays `high`/`critical` even if your confidence in the
+  read is only moderate.
 
 Call `flag_issue` once per issue you find. If you find no issues, simply state
 that no issues were found in your final text response.

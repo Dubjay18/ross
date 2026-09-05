@@ -129,6 +129,26 @@ export const RecheckResponseSchema = z.object({
 
 export type RecheckResponse = z.infer<typeof RecheckResponseSchema>;
 
+// ── Update Script (revision + scene diff) ──
+
+// Same shape as UploadScriptRequestSchema — text-based formats only. Binary
+// (pdf) revisions must use the multipart/form-data path on the same endpoint.
+export const UpdateScriptRequestSchema = z.object({
+  title: z.string().min(1).optional(),
+  content: z.string().min(1),
+  format: z.enum(["plaintext", "fountain", "fdx"]).default("plaintext"),
+});
+
+export type UpdateScriptRequest = z.infer<typeof UpdateScriptRequestSchema>;
+
+export const UpdateScriptResponseSchema = z.object({
+  script: ScriptSchema,
+  affectedSceneIds: z.array(z.string().uuid()),
+  removedSceneIds: z.array(z.string().uuid()),
+});
+
+export type UpdateScriptResponse = z.infer<typeof UpdateScriptResponseSchema>;
+
 // ── Issue Draft Schema ──
 export const IssueDraftSchema = z.object({
   type: IssueTypeSchema,

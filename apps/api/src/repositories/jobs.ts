@@ -15,3 +15,24 @@ export async function getJobById(id: string): Promise<AnalysisJob | null> {
   const row = await prisma.analysisJob.findUnique({ where: { id } });
   return row ? toAnalysisJob(row) : null;
 }
+
+export async function markJobRunning(id: string): Promise<void> {
+  await prisma.analysisJob.update({
+    where: { id },
+    data: { status: "running", startedAt: new Date(), progress: 10 },
+  });
+}
+
+export async function markJobCompleted(id: string): Promise<void> {
+  await prisma.analysisJob.update({
+    where: { id },
+    data: { status: "completed", completedAt: new Date(), progress: 100 },
+  });
+}
+
+export async function markJobFailed(id: string, error: string): Promise<void> {
+  await prisma.analysisJob.update({
+    where: { id },
+    data: { status: "failed", completedAt: new Date(), error: error.slice(0, 2000) },
+  });
+}

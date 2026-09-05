@@ -1,10 +1,12 @@
 import { Hono } from "hono";
 import {
   UploadScriptRequestSchema,
+  UpdateScriptRequestSchema,
   ScriptFormatSchema,
   type ScriptFormat,
   type UploadScriptResponse,
   type GetScriptResponse,
+  type UpdateScriptResponse,
   ListIssuesQuerySchema,
   type ListIssuesResponse,
   AnalyzeRequestSchema,
@@ -12,9 +14,10 @@ import {
   RecheckRequestSchema,
   type RecheckResponse,
 } from "@ross/shared";
-import { createScript, getScriptById } from "../repositories/scripts.js";
-import { listIssuesForScript } from "../repositories/issues.js";
+import { createScript, getScriptById, updateScriptContent } from "../repositories/scripts.js";
+import { listIssuesForScript, resolveIssuesForRemovedScenes } from "../repositories/issues.js";
 import { createAnalysisJob } from "../repositories/jobs.js";
+import { runAnalysisJob } from "../analysis-runner.js";
 import { HttpError, NotFoundError } from "../errors.js";
 import { parseScript } from "../parser/index.js";
 
@@ -94,6 +97,55 @@ scriptsRouter.get("/:id", async (c) => {
   return c.json(response);
 });
 
+scriptsRouter.patch("/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!(await getScriptById(id))) throw new NotFoundError("Script", id);
+
+  const contentType = c.req.header("content-type") ?? "";
+  const isMultipart = contentType.includes("multipart/form-data");
+
+  let title: string | undefined;
+  let format: ScriptFormat;
+  let input: string | Uint8Array;
+
+  if (isMultipart) {
+    const form = await c.req.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      throw new HttpError(400, "multipart update requires a 'file' field");
+    }
+
+    const titleField = form.get("title");
+    title = typeof titleField === "string" && titleField.length > 0 ? titleField : undefined;
+
+    const formatField = form.get("format");
+    format =
+      typeof formatField === "string" && formatField.length > 0
+        ? ScriptFormatSchema.parse(formatField)
+        : detectFormatFromFilename(file.name);
+
+    input = format === "pdf" ? new Uint8Array(await file.arrayBuffer()) : await file.text();
+  } else {
+    const body = UpdateScriptRequestSchema.parse(await c.req.json());
+    title = body.title;
+    format = body.format;
+    input = body.content;
+  }
+
+  const { script, affectedSceneIds, removedSceneIds } = await updateScriptContent(id, {
+    title,
+    format,
+    content: input,
+  });
+
+  if (removedSceneIds.length > 0) {
+    await resolveIssuesForRemovedScenes(id, removedSceneIds);
+  }
+
+  const response: UpdateScriptResponse = { script, affectedSceneIds, removedSceneIds };
+  return c.json(response);
+});
+
 scriptsRouter.get("/:id/issues", async (c) => {
   const id = c.req.param("id");
   if (!(await getScriptById(id))) throw new NotFoundError("Script", id);
@@ -110,23 +162,27 @@ scriptsRouter.get("/:id/issues", async (c) => {
 
 scriptsRouter.post("/:id/analyze", async (c) => {
   const id = c.req.param("id");
-  if (!(await getScriptById(id))) throw new NotFoundError("Script", id);
+  const script = await getScriptById(id);
+  if (!script) throw new NotFoundError("Script", id);
 
   const body = AnalyzeRequestSchema.parse(
     await c.req.json().catch(() => ({})),
   );
+  const sceneIds = body.sceneIds ?? [];
   const job = await createAnalysisJob({
     scriptId: id,
     mode: body.mode,
-    sceneIds: body.sceneIds ?? [],
+    sceneIds,
   });
+  void runAnalysisJob(job.id, script, body.mode, sceneIds);
   const response: AnalyzeResponse = { jobId: job.id, status: job.status };
   return c.json(response, 202);
 });
 
 scriptsRouter.post("/:id/recheck", async (c) => {
   const id = c.req.param("id");
-  if (!(await getScriptById(id))) throw new NotFoundError("Script", id);
+  const script = await getScriptById(id);
+  if (!script) throw new NotFoundError("Script", id);
 
   const body = RecheckRequestSchema.parse(await c.req.json());
   const job = await createAnalysisJob({
@@ -134,6 +190,7 @@ scriptsRouter.post("/:id/recheck", async (c) => {
     mode: "partial",
     sceneIds: body.sceneIds,
   });
+  void runAnalysisJob(job.id, script, "partial", body.sceneIds);
   const response: RecheckResponse = { jobId: job.id, status: job.status };
   return c.json(response, 202);
 });

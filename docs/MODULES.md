@@ -1,7 +1,9 @@
-# Ross — Remaining Modules, In Depth
+# Ross — Modules, In Depth
 
-Modules 0–2 are done (scaffold, shared contracts, API + Prisma store). This
-document breaks down Modules 3–10 into concrete, ownership-tagged subtasks.
+All modules (0–10) are done. This document breaks down Modules 3–10 into
+concrete, ownership-tagged subtasks, plus notes on how each was actually
+built (which sometimes differs from the original plan — see the per-module
+"as built" notes).
 
 Owner tags: **[JAY]** TypeScript/DevOps · **[DARKKNIGHT]** Python/Agent · **[SHARED]** needs both.
 
@@ -156,7 +158,21 @@ and the full Dockerized stack.
 
 ---
 
-## Module 4 — Agent orchestrator skeleton `[DARKKNIGHT]`
+## Module 4 — Agent orchestrator skeleton `[DARKKNIGHT]` — ✅ done
+
+**As built:** the FastAPI skeleton (4.1–4.4) plus the API→agent wiring (4.5)
+are both done. `apps/api/src/agent-client.ts` is a thin `fetch` wrapper
+around `AGENT_URL`; `apps/api/src/analysis-runner.ts` runs
+`markJobRunning` → call the agent → `createIssuesFromDrafts` → `markJobCompleted`,
+or `markJobFailed` with the agent's error message on failure. `POST
+/scripts/:id/analyze` and `/recheck` fire this without awaiting it (`void
+runAnalysisJob(...)`), so the HTTP response returns 202 immediately and the
+caller polls `GET /jobs/:id`. Verified end-to-end against a live (keyless)
+agent: job correctly transitions `queued → running → failed` with the
+agent's `GeminiError` surfaced as `job.error` when `GOOGLE_API_KEY` is unset,
+and `queued → running → completed` with issues persisted when a stub agent
+stands in for a real one.
+
 
 **Goal:** stand up the FastAPI service structure and tool-calling scaffold —
 no real reasoning yet, just plumbing that Module 5/6 will fill in.
@@ -217,7 +233,11 @@ end-to-end before any real reasoning exists).
 
 ---
 
-## Module 5 — Layer 1: internal consistency `[DARKKNIGHT]`
+## Module 5 — Layer 1: internal consistency `[DARKKNIGHT]` — ✅ done
+
+Implemented in `apps/agent/app/continuity/continuity.py` with fixtures and
+tests in `apps/agent/tests/`.
+
 
 **Goal:** the actual continuity reasoning over the full script.
 
@@ -260,7 +280,12 @@ surfaced with correct severity and both/all relevant scene citations.
 
 ---
 
-## Module 6 — Layer 2: external verification (Parallel) `[DARKKNIGHT]`
+## Module 6 — Layer 2: external verification (Parallel) `[DARKKNIGHT]` — ✅ done
+
+Implemented in `apps/agent/app/verification/verification.py`, using the
+`parallel-web` SDK with multi-query search and top-3 URL extraction; tested
+in `apps/agent/tests/test_verification.py`.
+
 
 **Goal:** cross-reference real-world claims using the Parallel Search API at
 runtime — this is the hackathon's required "Parallel Partner Track" integration,
@@ -304,7 +329,12 @@ issue with a cited verdict, sourced from a live Parallel Search call.
 
 ---
 
-## Module 7 — Conflict resolution & severity `[DARKKNIGHT]`
+## Module 7 — Conflict resolution & severity `[DARKKNIGHT]` — ✅ done
+
+Implemented in `apps/agent/app/merge.py`, tested in
+`apps/agent/tests/test_merge.py`, wired into `routes/analyze.py` right
+before both `/analyze` and `/recheck` return.
+
 
 **Goal:** merge Layer 1 + Layer 2 output into one triage-ready list before it
 ever leaves `apps/agent` — the API should receive an already-clean list.
@@ -329,10 +359,44 @@ the same order.
 
 ---
 
-## Module 8 — Incremental re-check `[SHARED]`
+## Module 8 — Incremental re-check `[SHARED]` — ✅ done
 
 **Goal:** re-analyzing a revised script shouldn't re-run everything, and must
 not clobber issues a human already triaged.
+
+**As built (differs from the original sketch below):** rather than a
+separate "patch scenes" endpoint, scene diffing lives on
+`PATCH /scripts/:id` (`apps/api/src/repositories/scripts.ts::updateScriptContent`,
+routed in `apps/api/src/routes/scripts.ts`). It accepts the same
+content/format shape as upload (JSON or multipart, including PDF), re-parses
+the full script, and matches old scenes to new ones **by position** (scene
+numbers are assigned sequentially with no gaps, so position `i` is a stable
+join key across a revision):
+
+- same content hash at position `i` → scene keeps its id, untouched.
+- different hash at position `i` → scene row is updated *in place* (its id
+  is preserved) — this is what keeps `Issue.sceneIds` valid for issues tied
+  to a changed-but-not-removed scene, and is returned in `affectedSceneIds`.
+- position exists in the old script but not the new one → the scene row is
+  deleted and its id goes into `removedSceneIds`.
+- position exists in the new script but not the old one → a new scene row is
+  created and its id goes into `affectedSceneIds`.
+
+Characters are matched by name (case-insensitive) across the revision so
+their ids also stay stable. `resolveIssuesForRemovedScenes` (in
+`repositories/issues.ts`) then auto-resolves any non-terminal issue whose
+`sceneIds` are now *entirely* contained in `removedSceneIds`
+(`dismissedReason: "scene_removed"`) — an issue that also touches a
+surviving scene is left alone. The web UI calls `PATCH` on "Upload a
+revision", then automatically fires `POST /recheck` with the returned
+`affectedSceneIds` if any are non-empty (`apps/web/src/App.tsx::handleRevise`).
+No schema versioning table was added — this was the "simpler, no schema
+change" option the plan called out, and it was sufficient for the hackathon
+scope. Verified manually end-to-end (see command transcript in project
+history): edit one scene → only that scene's id appears in
+`affectedSceneIds`; remove two trailing scenes → both come back in
+`removedSceneIds` and their open issues flip to `resolved`.
+
 
 ### 8.1 Scene diffing `[JAY]`
 - On re-upload (or a "patch scenes" endpoint — decide if needed, or if
@@ -374,10 +438,26 @@ ones a human already dismissed) are untouched.
 
 ---
 
-## Module 9 — Web UI `[JAY]`
+## Module 9 — Web UI `[JAY]` — ✅ done
 
 **Goal:** the writers'-room loop, usable without curl. Can start immediately
 after Module 2 using mocked issues — swap in live data once Module 4+ lands.
+
+**As built:** no mocking layer was needed in the end — Module 4.5 landed
+alongside the UI, so `apps/web/src` talks to the real API from the start.
+Structure: `src/api.ts` (typed fetch client), `src/components/UploadPanel.tsx`,
+`ScriptView.tsx` (scene list with speaker-attributed dialogue and
+issue-driven scene highlighting via `#scene-<id>` anchors), `IssueSidebar.tsx`
+(severity-sorted, status-filterable), `IssueDetail.tsx` (evidence, sources,
+disputed badge, and only the transitions `isValidTransition` allows from the
+current status), `JobBanner.tsx` (polls `GET /jobs/:id` every 1.5s while
+queued/running). `App.tsx` orchestrates upload → auto-analyze → poll → list
+issues, plus the revise → diff → auto-recheck flow from Module 8. Verified
+live in a browser (not just `tsc`): upload, scene/speaker rendering, issue
+selection + scene highlighting, status transitions updating the sidebar
+live, recheck appending new issues, and a revision correctly preserving
+unchanged-scene issues while triggering recheck only on changed scenes.
+
 
 | View | Behavior |
 |---|---|
@@ -400,7 +480,7 @@ triage (resolve/dismiss) → re-check — end to end.
 
 ---
 
-## Module 10 — E2E hardening & Devpost pack `[SHARED]`
+## Module 10 — E2E hardening & Devpost pack `[SHARED]` — ✅ done
 
 | Item | Detail | Owner |
 |---|---|---|
@@ -409,6 +489,27 @@ triage (resolve/dismiss) → re-check — end to end.
 | Compliance check | Confirm the only runtime third-party calls are Google AI + Parallel (hackathon rule); LICENSE present; repo public | Jay (infra-facing) |
 | Demo script | Scripted ~3-minute walkthrough for the submission video | Shared |
 | Compose polish | One-command `make demo` that seeds the sample script and opens the UI | Jay |
+
+**As built:** `scripts/seed/demo-script.fountain` ("The Long Way Home") is a
+6-scene Fountain script with three planted errors — one per class Ross
+targets: a wardrobe/injury continuity error (bandage moves arms, then
+vanishes with no removal scene), a timeline error (an implausible day→night
+jump with no elapsed time), and one real external-fact error (a smartphone
+in a scene dated October 1985, meant to be the claim Layer 2 sends to
+Parallel Search). It's parse-verified against the actual parser (6 scenes,
+3 characters recognized correctly). `scripts/seed-demo.sh` uploads it
+through the real API, triggers a full analysis, and polls the job to
+completion/failure — an automated smoke check that exercises the whole
+Module 4.5 → 5/6/7 → persisted-issues pipeline, not just a fixture-in/JSON-out
+unit test. `make demo` brings up the stack, waits for health, runs the seed
+script, and opens the web UI. `docs/DEMO.md` has the ~3-minute walkthrough
+script (upload → triage → revise) plus the compliance notes (Google AI +
+Parallel are the only runtime third-party calls; MIT `LICENSE` present;
+repo hosted at `github.com/Dubjay18/ross`). A dedicated automated test-matrix
+harness beyond the existing per-module unit/integration suites
+(`apps/agent/tests/`, `apps/api/src/parser/parser.test.ts`) was judged out
+of scope for the hackathon timeline — the manual walkthrough in `DEMO.md`
+plus `seed-demo.sh` cover the E2E path.
 
 ---
 
