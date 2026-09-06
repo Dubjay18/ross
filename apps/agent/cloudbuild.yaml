@@ -1,0 +1,11 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "us-central1-docker.pkg.dev/ross-507808/ross/ross-agent:latest"
+      - "-f"
+      - "apps/agent/Dockerfile"
+      - "apps/agent"
+images:
+  - "us-central1-docker.pkg.dev/ross-507808/ross/ross-agent:latest"

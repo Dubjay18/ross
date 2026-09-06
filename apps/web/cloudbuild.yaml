@@ -1,0 +1,11 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "us-central1-docker.pkg.dev/ross-507808/ross/ross-web:latest"
+      - "-f"
+      - "apps/web/Dockerfile"
+      - "."
+images:
+  - "us-central1-docker.pkg.dev/ross-507808/ross/ross-web:latest"
