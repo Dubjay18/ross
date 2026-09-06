@@ -2,6 +2,8 @@ steps:
   - name: "gcr.io/cloud-builders/docker"
     args:
       - "build"
+      - "--build-arg"
+      - "VITE_API_URL=${_VITE_API_URL}"
       - "-t"
       - "us-central1-docker.pkg.dev/ross-507808/ross/ross-web:latest"
       - "-f"
@@ -9,3 +11,5 @@ steps:
       - "."
 images:
   - "us-central1-docker.pkg.dev/ross-507808/ross/ross-web:latest"
+substitutions:
+  _VITE_API_URL: http://localhost:3001
