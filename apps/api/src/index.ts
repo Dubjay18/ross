@@ -14,10 +14,15 @@ import { ScriptTooLargeError } from "./parser/index.js";
 
 const app = new Hono();
 
+const rawOrigins = process.env.CORS_ORIGINS;
+const allowedOrigins = rawOrigins
+  ? rawOrigins.split(",").map((o) => o.trim())
+  : ["http://localhost:5173", "http://127.0.0.1:5173"];
+
 app.use(
   "*",
   cors({
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: allowedOrigins,
   }),
 );
 
