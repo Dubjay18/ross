@@ -17,5 +17,6 @@ RUN pnpm --filter @ross/shared build && pnpm --filter @ross/web build
 FROM nginx:1.27-alpine AS runner
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
-EXPOSE 5173
-CMD ["nginx", "-g", "daemon off;"]
+ENV PORT=8080
+EXPOSE 8080
+CMD ["sh", "-c", "sed -i \"s/listen 5173;/listen ${PORT};/\" /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
